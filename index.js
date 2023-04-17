@@ -8,12 +8,13 @@ import express from 'express'
 const app = express()
 
 import { Note } from './models/Note.js'
+import { notFound } from './middlewares/notFound.js'
+import { handleErrors } from './middlewares/handleError.js'
 
 const PORT = 3001
 
 app.use(express.json())
 
-let notes = []
 
 app.get('/', (req, res) => {
 	res.send('Hello World!')
@@ -25,54 +26,66 @@ app.get('/api/notes', (req, res) => {
 	})
 })
 
-app.get('/api/notes/:id', (req, res) => {
-	const id = Number(req.params.id)
-	const note = notes.find(p => p.id === id)
-	if (!note) {
-		res.status(404).send('The product with the given ID was not found.')
-	}
-	res.send(note)
+app.get('/api/notes/:id', (req, res, next) => {
+	const id = req.params.id
+
+	Note.findById(id).then((result) => {
+		res.send(result)
+	}).catch((err) => {
+		next(err)
+	})
 })
 
-app.delete('/api/notes/:id', (req, res) => {
-	const id = Number(req.params.id)
-	const note = notes.filter(p => p.id !== id)
-	!note ? res.status(404).send('The product with the given ID was not found.') : null
-
-	notes = note
-	res.send(note)
+app.delete('/api/notes/:id', (req, res, next) => {
+	const id = req.params.id
+	
+	Note.findByIdAndDelete(id).then((result) => {
+		res.send(result)
+	}).catch((err) => {
+		next(err)
+	})
 })
 
 app.post('/api/notes', (req, res) => {
-	const { content, price: important } = req.body
+	const { content, important } = req.body
 
-	!content || !important ? res.status(400).send('Data not found') : null
+	!content ? res.status(400).send('Data not found') : null
 
-	const product = {
+	const newNote = new Note({
 		content: content,
 		date: new Date(),
+		important: important || false,
+	})
+
+	newNote.save().then((result) => {
+		res.status(201).send(result)
+	}).catch((err) => {
+		res.status(400).send(err.message)
+	})
+})
+
+app.put('/api/notes/:id', (req, res, next) => {
+	const id = req.params.id
+	const { content, important } = req.body
+
+	!content ? res.status(400).send('Data not found') : null
+
+	const newNoteInfo = {
+		content: content,
 		important: important,
 	}
-	notes.push(product)
-	notes = [...notes, product]
-	res.status(201).send(product)
+
+	Note.findByIdAndUpdate(id, newNoteInfo, { new : true}).then((result) => {
+		res.status(200).send(result)
+	}).catch((err) => {
+		next(err)
+	})
+	
 })
 
-app.put('/api/notes/:id', (req, res) => {
-	const id = Number(req.params.id)
-	const { name, price } = req.body
+app.use(notFound)
 
-	!name || !price ? res.status(400).send('Data not found') : null
-
-	const product = notes.find(p => p.id === id)
-
-	!product ? res.status(404).send('The product with the given ID was not found.') : null
-
-	product.name = name
-	product.price = price
-
-	res.send(product)
-})
+app.use(handleErrors)
 
 
 app.listen(process.env.PORT || 3001, () => {
